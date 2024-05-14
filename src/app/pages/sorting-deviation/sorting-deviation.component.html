@@ -1,0 +1,72 @@
+<div>Отклонение от сортировки на складах и СЦ (общий)</div>
+
+<mat-form-field>
+  <mat-label>Сортировка</mat-label>
+  <mat-select [formControl]="sortingMode">
+    <mat-option [value]="SortingMode.All">Все</mat-option>
+    <mat-option [value]="SortingMode.PM">ПМ</mat-option>
+  </mat-select>
+</mat-form-field>
+
+<mat-form-field>
+  <mat-label>Окно, дней</mat-label>
+  <mat-select [formControl]="daysCountToShow">
+    @for (number of daysCountToShowArray; track number) {
+    <mat-option [value]="number">{{ number }}</mat-option>
+    }
+  </mat-select>
+</mat-form-field>
+
+<mat-form-field>
+  <mat-label>Колонки</mat-label>
+  <mat-select [formControl]="showingColumns" multiple>
+    @for (columnName of showingColumnsList; track columnName) {
+    <mat-option [value]="columnName">{{
+      columnName | columnHeaderName
+    }}</mat-option>
+    }
+  </mat-select>
+</mat-form-field>
+
+<mat-form-field>
+  <mat-label>Поиск</mat-label>
+  <input
+    matInput
+    placeholder="Введите значение.."
+    #input
+    (keyup)="setFilterValue($event)"
+  />
+</mat-form-field>
+
+@if (firstColumnIdsList$ | async; as firstColumnIdsList) {
+<mat-table [dataSource]="data$ | async" class="mat-elevation-z8" matSort>
+  @for (columnName of firstColumnIdsList; track columnName) {
+  <ng-container
+    [matColumnDef]="columnName"
+    [sticky]="columnName === 'sortingCenter'"
+  >
+    <mat-header-cell *matHeaderCellDef [mat-sort-header]="columnName">
+      {{ columnName | columnHeaderName }}
+    </mat-header-cell>
+
+    <mat-cell *matCellDef="let element">
+      {{ element[columnName] ?? 0 }}
+    </mat-cell>
+  </ng-container>
+  } @for (columnName of secondColumnIdsList$ | async; track columnName) {
+  <ng-container [matColumnDef]="columnName" [sticky]="columnName === 'empty'">
+    <mat-header-cell *matHeaderCellDef>
+      {{ columnName | columnHeaderName }}
+    </mat-header-cell>
+  </ng-container>
+  }
+
+  <mat-header-row
+    *matHeaderRowDef="firstColumnIdsList; sticky: true"
+  ></mat-header-row>
+  <mat-header-row
+    *matHeaderRowDef="secondColumnIdsList$ | async; sticky: true"
+  ></mat-header-row>
+  <mat-row *matRowDef="let row; columns: firstColumnIdsList"></mat-row>
+</mat-table>
+}

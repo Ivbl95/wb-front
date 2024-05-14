@@ -1,0 +1,16 @@
+mat-cell,
+mat-header-cell {
+  font-weight: 400;
+  padding: 0 !important;
+  min-width: 124px;
+  max-width: 124px;
+}
+
+.table__header-date {
+  min-width: 372px;
+  max-width: 372px;
+}
+
+mat-table {
+  display: table;
+}
