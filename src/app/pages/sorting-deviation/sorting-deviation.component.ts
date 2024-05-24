@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ViewChild } from '@angular/core';
-import { FormControl, FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { FormControl, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -8,28 +8,19 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import {
-  BehaviorSubject,
-  combineLatest,
-  map,
-  Observable,
-  startWith,
-} from 'rxjs';
+import { combineLatest, map, Observable, startWith } from 'rxjs';
 import { ColumnHeaderNamePipe } from '../../pipes/column-header-name.pipe';
 import { ApiService } from '../../services/api.service';
 
-enum SortingMode {
-  PM = 'pm',
+enum SortLastMile {
+  LM = 'lm',
   All = 'all',
 }
 
-const DAYS_COUNT_TO_SHOW: number = 30;
-const INIT_SORTING_MODE: SortingMode = SortingMode.All;
-const SHOWING_COLUMNS_LIST: string[] = ['delta', 'sortedOn', 'sortedFor'];
-const DAYS_COUNT_TO_SHOW_ARRAY: number[] = Array.from(
-  { length: DAYS_COUNT_TO_SHOW },
-  (_, index) => index + 1
-).reverse();
+const RECENT_DAYS_COUNT: number = 30;
+const INIT_LAST_MILE: SortLastMile = SortLastMile.All;
+const INIT_SORT_COLUMN_TYPES: string[] = ['delta', 'sortedOn', 'sortedFor'];
+const RECENT_DAYS_COUNT_ARRAY: number[] = Array.from({ length: RECENT_DAYS_COUNT }, (_, index) => index + 1).reverse();
 
 @Component({
   selector: 'app-sorting-deviation',
@@ -53,205 +44,159 @@ const DAYS_COUNT_TO_SHOW_ARRAY: number[] = Array.from(
 })
 export class SortingDeviationComponent {
   @ViewChild(MatSort) sort: MatSort | null = null;
-  public filterValue$: BehaviorSubject<string | null> = new BehaviorSubject<
-    string | null
-  >(null);
 
-  public sortingMode: FormControl<SortingMode> = new FormControl<SortingMode>(
-    INIT_SORTING_MODE,
-    { nonNullable: true }
+  public formGroup: FormGroup<any> = new FormGroup<any>({
+    sortLastMile: new FormControl<SortLastMile>(INIT_LAST_MILE, { nonNullable: true }),
+    sortRecentDaysCount: new FormControl<number>(RECENT_DAYS_COUNT, { nonNullable: true }),
+    sortColumnTypes: new FormControl<string[]>(INIT_SORT_COLUMN_TYPES, { nonNullable: true }),
+    searchField: new FormControl<string>('', { nonNullable: true }),
+  });
+
+  public sortLastMileValue$: Observable<SortLastMile> = this.formGroup
+    .get('sortLastMile')!
+    .valueChanges.pipe(startWith(INIT_LAST_MILE));
+  public sortRecentDaysCountValue$: Observable<number> = this.formGroup
+    .get('sortRecentDaysCount')!
+    .valueChanges.pipe(startWith(RECENT_DAYS_COUNT));
+  public sortColumnTypesValue$: Observable<string[]> = this.formGroup
+    .get('sortColumnTypes')!
+    .valueChanges.pipe(startWith(INIT_SORT_COLUMN_TYPES));
+  public searchFieldValue$: Observable<string> = this.formGroup.get('searchField')!.valueChanges.pipe(startWith(''));
+  public columnsTypesCount$: Observable<number> = this.sortColumnTypesValue$.pipe(
+    map((showingColumns: string[]) => showingColumns.length)
   );
-  public daysCountToShow: FormControl<number> = new FormControl<number>(
-    DAYS_COUNT_TO_SHOW,
-    { nonNullable: true }
+
+  public columnsTypes: string[] = INIT_SORT_COLUMN_TYPES;
+  public recentDaysCountArray: number[] = RECENT_DAYS_COUNT_ARRAY;
+  public SortLastMileType: typeof SortLastMile = SortLastMile;
+
+  public enableDates$: Observable<string[]> = this.sortRecentDaysCountValue$.pipe(
+    map((sortRecentDaysCount: number) => {
+      const enableDates: string[] = [];
+      const today = new Date();
+
+      for (let i = 0; i < sortRecentDaysCount; i++) {
+        const date = new Date(today);
+        date.setDate(today.getDate() - i);
+        const formattedDate = date.toISOString().split('T')[0];
+        enableDates.push(formattedDate);
+      }
+
+      return enableDates.sort().reverse();
+    })
   );
-
-  public showingColumns: FormControl<string[]> = new FormControl<string[]>(
-    SHOWING_COLUMNS_LIST,
-    {
-      nonNullable: true,
-    }
-  );
-
-  public showingColumnsValue$: Observable<string[]> =
-    this.showingColumns.valueChanges.pipe(startWith(SHOWING_COLUMNS_LIST));
-
-  public showingColumnsList: string[] = SHOWING_COLUMNS_LIST;
-  public daysCountToShowArray: number[] = DAYS_COUNT_TO_SHOW_ARRAY;
-  public SortingMode: typeof SortingMode = SortingMode;
-
-  public showingColumnsCount$: Observable<number> =
-    this.showingColumnsValue$.pipe(
-      map((showingColumns: string[]) => showingColumns.length)
-    );
-
-  public showingDatesList$: Observable<string[]> =
-    this.daysCountToShow.valueChanges.pipe(
-      startWith(DAYS_COUNT_TO_SHOW),
-      map((daysCountToShow: number) => {
-        const showingDatesList: string[] = [];
-        const today = new Date();
-
-        for (let i = 0; i < daysCountToShow; i++) {
-          const date = new Date(today);
-          date.setDate(today.getDate() - i);
-          const formattedDate = date.toISOString().split('T')[0];
-          showingDatesList.push(formattedDate);
-        }
-
-        return showingDatesList.sort().reverse();
-      })
-    );
 
   public firstColumnIdsList$: Observable<string[]> = combineLatest([
-    this.sortingMode.valueChanges.pipe(startWith(INIT_SORTING_MODE)),
-    this.showingColumnsValue$,
-    this.showingDatesList$,
+    this.sortLastMileValue$,
+    this.sortColumnTypesValue$,
+    this.enableDates$,
   ]).pipe(
-    map(
-      ([sortingMode, showingColumns, showingDatesList]: [
-        string,
-        string[],
-        string[]
-      ]) => {
-        const sumColumns = showingColumns
-          .map((column: string) => `all-${column}`)
-          .filter((column) => column);
+    map(([sortLastMile, sortColumnTypes, enableDates]: [string, string[], string[]]) => {
+      const sumColumns: string[] = sortColumnTypes
+        .map((column: string) => `sum-${column}`)
+        .filter((column: string) => column);
 
-        const dateColumns = showingDatesList.flatMap((date: string) =>
-          showingColumns.map(
-            (column: string) => `${date}-${sortingMode}-${column}`
-          )
-        );
+      const dateColumns: string[] = enableDates.flatMap((date: string) =>
+        sortColumnTypes.map((column: string) => `${date}-${sortLastMile}-${column}`)
+      );
 
-        return ['sortingCenter', ...sumColumns, ...dateColumns];
-      }
-    )
+      return ['sortingCenter', ...sumColumns, ...dateColumns];
+    })
   );
 
-  public secondColumnIdsList$: Observable<string[]> =
-    this.showingDatesList$.pipe(
-      map((showingDatesList: string[]) => {
-        return ['empty', 'all', ...showingDatesList];
-      })
-    );
+  public secondColumnIdsList$: Observable<string[]> = this.enableDates$.pipe(
+    map((enableDates: string[]) => {
+      return ['empty', 'sum', ...enableDates];
+    })
+  );
 
-  public jsonData$: Observable<any> = this.apiService.getTableData().pipe(
+  public preparedData$: Observable<any> = this.apiService.getTableData().pipe(
     map((jsonData: any) => {
-      const rows = jsonData.query_result.data.rows;
-      const tempData: any = {};
+      const rows: any[] = jsonData.query_result.data.rows;
+      const preparedData: any = {};
 
       rows.forEach((element: any) => {
         const center: string = element['СЦ'];
         const date: string = element['Дата'];
-        const values: number[] = [
+        const cellValues: number[] = [
           element['Дельта'],
           element['Отсортировано на СЦ'],
           element['Отсортировано для СЦ'],
         ];
 
-        if (!tempData[center]) {
-          tempData[center] = {
+        if (!preparedData[center]) {
+          preparedData[center] = {
             sortingCenter: center,
           };
         }
 
-        [SortingMode.All, SortingMode.PM].forEach(
-          (sortingMode: SortingMode) => {
-            this.showingColumnsList.forEach((key, index) => {
-              if (
-                sortingMode === SortingMode.All ||
-                (sortingMode === SortingMode.PM && element['ПМ'] === 1)
-              ) {
-                const id = `${date}-${sortingMode}-${key}`;
-                tempData[center][id] =
-                  (tempData[center][id] ?? 0) + values[index];
-              }
-            });
-
-            const idDelta = `${date}-${sortingMode}-delta`;
-            const idSortedOn = `${date}-${sortingMode}-sortedOn`;
-            const cellColor = `${date}-${sortingMode}-delta-cell-color`;
-            const percentDifference: number =
-              tempData[center][idDelta] / tempData[center][idSortedOn] || 0;
-
-            if (percentDifference >= 0.3) {
-              tempData[center][cellColor] = 'red';
-            } else if (percentDifference >= 0.1 && percentDifference < 0.3) {
-              tempData[center][cellColor] = 'yellow';
-            } else if (percentDifference >= 0 && percentDifference < 0.1) {
-              tempData[center][cellColor] = 'white';
-            } else if (percentDifference < 0) {
-              tempData[center][cellColor] = 'green';
+        [SortLastMile.All, SortLastMile.LM].forEach((sortLastMile: SortLastMile) => {
+          this.columnsTypes.forEach((columnType: string, index: number) => {
+            if (sortLastMile === SortLastMile.All || (sortLastMile === SortLastMile.LM && element['ПМ'] === 1)) {
+              const id: string = `${date}-${sortLastMile}-${columnType}`;
+              preparedData[center][id] = (preparedData[center][id] ?? 0) + cellValues[index];
             }
+          });
 
-            console.log(tempData[center][cellColor]);
-          }
-        );
+          const idDelta: string = `${date}-${sortLastMile}-delta`;
+          const idSortedOn: string = `${date}-${sortLastMile}-sortedOn`;
+          const idCellColor: string = `${date}-${sortLastMile}-delta-cell-color`;
+          const percentDifference: number = preparedData[center][idDelta] / preparedData[center][idSortedOn] || 0;
+
+          preparedData[center][idCellColor] = this.calcCellColor(percentDifference);
+        });
       });
 
-      return Object.values(tempData);
+      return Object.values(preparedData);
     })
   );
 
-  public tableData$: Observable<any> = combineLatest([
-    this.jsonData$,
-    this.firstColumnIdsList$,
-  ]).pipe(
-    map(([jsonData, firstColumnIdsList]: [any[], string[]]) => {
-      jsonData = jsonData.map((jsonRow: any) => {
-        jsonRow['all-delta'] = 0;
-        jsonRow['all-sortedOn'] = 0;
-        jsonRow['all-sortedFor'] = 0;
+  public preparedDataWithSum$: Observable<any> = combineLatest([this.preparedData$, this.firstColumnIdsList$]).pipe(
+    map(([preparedData, firstColumnIdsList]: [any[], string[]]) => {
+      const preparedDataWithSum: any = preparedData.map((preparedDataRow: any) => {
+        preparedDataRow['sum-delta'] = 0;
+        preparedDataRow['sum-sortedOn'] = 0;
+        preparedDataRow['sum-sortedFor'] = 0;
 
         firstColumnIdsList.forEach((columnId: string) => {
-          this.showingColumnsList.forEach((key: string) => {
-            if (columnId.includes(key)) {
-              jsonRow[`all-${key}`] += jsonRow[columnId] ?? 0;
+          this.columnsTypes.forEach((columnsType: string) => {
+            if (columnId.includes(columnsType)) {
+              preparedDataRow[`sum-${columnsType}`] += preparedDataRow[columnId] ?? 0;
             }
           });
         });
 
-        const percentDifference: number =
-          jsonRow['all-delta'] / jsonRow['all-sortedOn'] || 0;
+        const percentDifference: number = preparedDataRow['sum-delta'] / preparedDataRow['sum-sortedOn'] || 0;
+        preparedDataRow['sum-delta-cell-color'] = this.calcCellColor(percentDifference);
 
-        if (percentDifference >= 0.3) {
-          jsonRow['all-delta-cell-color'] = 'red';
-        } else if (percentDifference >= 0.1 && percentDifference < 0.3) {
-          jsonRow['all-delta-cell-color'] = 'yellow';
-        } else if (percentDifference >= 0 && percentDifference < 0.1) {
-          jsonRow['all-delta-cell-color'] = 'white';
-        } else if (percentDifference < 0) {
-          jsonRow['all-delta-cell-color'] = 'green';
-        }
-
-        return jsonRow;
+        return preparedDataRow;
       });
 
-      return new MatTableDataSource<any>(jsonData);
+      return new MatTableDataSource<any>(preparedDataWithSum);
     })
   );
 
-  public data$: Observable<any> = combineLatest([
-    this.tableData$,
-    this.filterValue$,
-  ]).pipe(
-    map(
-      ([tableData, filterValue]: [MatTableDataSource<any>, string | null]) => {
-        tableData.sort = this.sort;
-        tableData.filter = filterValue ?? '';
-        console.log(tableData, 'tableData');
-        return tableData;
-      }
-    )
+  public calcCellColor(percentDifference: number): string {
+    if (percentDifference >= 0.3) {
+      return 'red';
+    } else if (percentDifference >= 0.1 && percentDifference < 0.3) {
+      return 'yellow';
+    } else if (percentDifference >= 0 && percentDifference < 0.1) {
+      return 'white';
+    } else {
+      return 'green';
+    }
+  }
+
+  public tableData$: Observable<any> = combineLatest([this.preparedDataWithSum$, this.searchFieldValue$]).pipe(
+    map(([tableData, searchFieldValue]: [MatTableDataSource<any>, string]) => {
+      tableData.sort = this.sort;
+      tableData.filter = searchFieldValue?.trim() ?? '';
+      return tableData;
+    })
   );
 
   constructor(private apiService: ApiService) {}
-  public setFilterValue(event: Event) {
-    this.filterValue$.next(
-      (event.target as HTMLInputElement).value.trim().toLowerCase()
-    );
-  }
 }
 // interface CellValue {
 //   delta: number;
@@ -259,13 +204,13 @@ export class SortingDeviationComponent {
 //   sortedFor: number;
 // }
 
-// interface SortingModeInfo {
-//   [SortingMode.All]: CellValue;
-//   [SortingMode.PM]: CellValue;
+// interface SortLastMileInfo {
+//   [SortLastMile.All]: CellValue;
+//   [SortLastMile.LM]: CellValue;
 // }
 
 // interface DateInfo {
-//   [date: string]: SortingModeInfo;
+//   [date: string]: SortLastMileInfo;
 // }
 
 // interface SortingCenterInfo {

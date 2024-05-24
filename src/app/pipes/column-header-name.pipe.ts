@@ -11,6 +11,10 @@ export class ColumnHeaderNamePipe implements PipeTransform {
       return 'СЦ';
     }
 
+    if (columnId === 'sum') {
+      return 'Всего';
+    }
+
     if (columnId.includes('delta')) {
       return 'Дельта';
     }
@@ -21,10 +25,6 @@ export class ColumnHeaderNamePipe implements PipeTransform {
 
     if (columnId.includes('sortedFor')) {
       return 'Отсортировано для СЦ';
-    }
-
-    if (columnId === 'all') {
-      return 'Всего';
     }
 
     return columnId !== 'empty' && columnId ? columnId : '';
