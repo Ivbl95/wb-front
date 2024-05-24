@@ -3,6 +3,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 @Pipe({
   name: 'columnHeaderName',
   standalone: true,
+  pure: true,
 })
 export class ColumnHeaderNamePipe implements PipeTransform {
   transform(columnId: string): string {

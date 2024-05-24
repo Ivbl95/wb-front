@@ -40,12 +40,12 @@
 
 @if (firstColumnIdsList$ | async; as firstColumnIdsList) {
 <mat-table [dataSource]="data$ | async" class="mat-elevation-z8" matSort>
-  @for (columnName of firstColumnIdsList; track columnName) {
+  @for (columnName of firstColumnIdsList$ | async; track columnName) {
   <ng-container
     [matColumnDef]="columnName"
     [sticky]="columnName === 'sortingCenter'"
   >
-    <mat-header-cell *matHeaderCellDef [mat-sort-header]="columnName">
+    <mat-header-cell *matHeaderCellDef>
       {{ columnName | columnHeaderName }}
     </mat-header-cell>
 
@@ -53,20 +53,31 @@
       {{ element[columnName] ?? 0 }}
     </mat-cell>
   </ng-container>
-  } @for (columnName of secondColumnIdsList$ | async; track columnName) {
+  } @if (showingColumnsCount$ | async; as showingColumnsCount) { @for
+  (columnName of secondColumnIdsList$ | async; track columnName) {
   <ng-container [matColumnDef]="columnName" [sticky]="columnName === 'empty'">
-    <mat-header-cell *matHeaderCellDef>
+    <mat-header-cell
+      *matHeaderCellDef
+      [style.max-width.px]="
+        columnName === 'empty' ? 124 : 124 * showingColumnsCount
+      "
+      [style.min-width.px]="
+        columnName === 'empty' ? 124 : 124 * showingColumnsCount
+      "
+    >
       {{ columnName | columnHeaderName }}
     </mat-header-cell>
   </ng-container>
-  }
+  } }
 
   <mat-header-row
     *matHeaderRowDef="firstColumnIdsList; sticky: true"
   ></mat-header-row>
+
   <mat-header-row
     *matHeaderRowDef="secondColumnIdsList$ | async; sticky: true"
   ></mat-header-row>
+
   <mat-row *matRowDef="let row; columns: firstColumnIdsList"></mat-row>
 </mat-table>
 }

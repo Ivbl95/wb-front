@@ -80,7 +80,7 @@ export class SortingDeviationComponent {
   public daysCountToShowArray: number[] = DAYS_COUNT_TO_SHOW_ARRAY;
   public SortingMode: typeof SortingMode = SortingMode;
 
-  public showingColumnsCount: Observable<number> =
+  public showingColumnsCount$: Observable<number> =
     this.showingColumnsValue$.pipe(
       map((showingColumns: string[]) => showingColumns.length)
     );
@@ -163,9 +163,9 @@ export class SortingDeviationComponent {
                 sortingMode === SortingMode.All ||
                 (sortingMode === SortingMode.PM && element['ПМ'] === 1)
               ) {
-                const dateKey = `${date}-${sortingMode}-${key}`;
-                tempData[center][dateKey] =
-                  (tempData[center][dateKey] ?? 0) + values[index];
+                const id = `${date}-${sortingMode}-${key}`;
+                tempData[center][id] =
+                  (tempData[center][id] ?? 0) + values[index];
               }
             }
           );
@@ -182,28 +182,19 @@ export class SortingDeviationComponent {
   ]).pipe(
     map(([jsonData, firstColumnIdsList]: [any[], string[]]) => {
       jsonData = jsonData.map((jsonRow: any) => {
-        const row: any = {
-          'all-delta': 0,
-          'all-sortedOn': 0,
-          'all-sortedFor': 0,
-        };
+        jsonRow['all-delta'] = 0;
+        jsonRow['all-sortedOn'] = 0;
+        jsonRow['all-sortedFor'] = 0;
+
         firstColumnIdsList.forEach((columnId: string) => {
-          row[columnId] = jsonRow[columnId] ?? 0;
-
-          if (columnId.includes('delta')) {
-            row['all-delta'] += jsonRow[columnId] ?? 0;
-          }
-
-          if (columnId.includes('sortedOn')) {
-            row['all-sortedOn'] += jsonRow[columnId] ?? 0;
-          }
-
-          if (columnId.includes('sortedFor')) {
-            row['all-sortedFor'] += jsonRow[columnId] ?? 0;
-          }
+          this.showingColumnsList.forEach((key: string) => {
+            if (columnId.includes(key)) {
+              jsonRow[`all-${key}`] += jsonRow[columnId] ?? 0;
+            }
+          });
         });
 
-        return row;
+        return jsonRow;
       });
 
       return new MatTableDataSource<any>(jsonData);
@@ -218,6 +209,7 @@ export class SortingDeviationComponent {
       ([tableData, filterValue]: [MatTableDataSource<any>, string | null]) => {
         tableData.sort = this.sort;
         tableData.filter = filterValue ?? '';
+        console.log(tableData, 'tableData');
         return tableData;
       }
     )
@@ -230,3 +222,22 @@ export class SortingDeviationComponent {
     );
   }
 }
+// interface CellValue {
+//   delta: number;
+//   sortedOn: number;
+//   sortedFor: number;
+// }
+
+// interface SortingModeInfo {
+//   [SortingMode.All]: CellValue;
+//   [SortingMode.PM]: CellValue;
+// }
+
+// interface DateInfo {
+//   [date: string]: SortingModeInfo;
+// }
+
+// interface SortingCenterInfo {
+//   sortingCenter: string;
+//   dates: DateInfo[];
+// }
