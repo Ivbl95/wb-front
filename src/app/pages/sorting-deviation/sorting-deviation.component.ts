@@ -156,9 +156,9 @@ export class SortingDeviationComponent {
           };
         }
 
-        this.showingColumnsList.forEach((key, index) => {
-          [SortingMode.All, SortingMode.PM].forEach(
-            (sortingMode: SortingMode) => {
+        [SortingMode.All, SortingMode.PM].forEach(
+          (sortingMode: SortingMode) => {
+            this.showingColumnsList.forEach((key, index) => {
               if (
                 sortingMode === SortingMode.All ||
                 (sortingMode === SortingMode.PM && element['ПМ'] === 1)
@@ -167,9 +167,27 @@ export class SortingDeviationComponent {
                 tempData[center][id] =
                   (tempData[center][id] ?? 0) + values[index];
               }
+            });
+
+            const idDelta = `${date}-${sortingMode}-delta`;
+            const idSortedOn = `${date}-${sortingMode}-sortedOn`;
+            const cellColor = `${date}-${sortingMode}-delta-cell-color`;
+            const percentDifference: number =
+              tempData[center][idDelta] / tempData[center][idSortedOn] || 0;
+
+            if (percentDifference >= 0.3) {
+              tempData[center][cellColor] = 'red';
+            } else if (percentDifference >= 0.1 && percentDifference < 0.3) {
+              tempData[center][cellColor] = 'yellow';
+            } else if (percentDifference >= 0 && percentDifference < 0.1) {
+              tempData[center][cellColor] = 'white';
+            } else if (percentDifference < 0) {
+              tempData[center][cellColor] = 'green';
             }
-          );
-        });
+
+            console.log(tempData[center][cellColor]);
+          }
+        );
       });
 
       return Object.values(tempData);
@@ -193,6 +211,19 @@ export class SortingDeviationComponent {
             }
           });
         });
+
+        const percentDifference: number =
+          jsonRow['all-delta'] / jsonRow['all-sortedOn'] || 0;
+
+        if (percentDifference >= 0.3) {
+          jsonRow['all-delta-cell-color'] = 'red';
+        } else if (percentDifference >= 0.1 && percentDifference < 0.3) {
+          jsonRow['all-delta-cell-color'] = 'yellow';
+        } else if (percentDifference >= 0 && percentDifference < 0.1) {
+          jsonRow['all-delta-cell-color'] = 'white';
+        } else if (percentDifference < 0) {
+          jsonRow['all-delta-cell-color'] = 'green';
+        }
 
         return jsonRow;
       });

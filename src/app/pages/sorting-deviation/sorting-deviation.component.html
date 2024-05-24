@@ -49,7 +49,10 @@
       {{ columnName | columnHeaderName }}
     </mat-header-cell>
 
-    <mat-cell *matCellDef="let element">
+    <mat-cell
+      *matCellDef="let element"
+      [style.background-color]="element[columnName + '-cell-color']"
+    >
       {{ element[columnName] ?? 0 }}
     </mat-cell>
   </ng-container>
