@@ -6,28 +6,27 @@ import { catchError, Observable, throwError } from 'rxjs';
   providedIn: 'root',
 })
 export class ApiService {
-  private apiUrl =
-    'http://ch.sc-reports.vm.prod-6.cloud.el/api/queries/9/results.json?api_key=00jwYsh1ddNhK0CFU5rKYUILNBBAYzG9IZYFLK4e';
+  private url: string = 'http://ch.sc-reports.vm.prod-6.cloud.el/api/';
 
   constructor(private http: HttpClient) {}
 
-  getTableData(): Observable<any> {
-    return this.http
-      .get<any>(this.apiUrl) // Используйте this.apiUrl без /data
-      .pipe(catchError(this.handleError));
+  public getTableRows(): Observable<any> {
+    const TableRowsUrl: string = 'queries/9/results.json?api_key=00jwYsh1ddNhK0CFU5rKYUILNBBAYzG9IZYFLK4e';
+    return this.http.get<any>(`${this.url}${TableRowsUrl}`).pipe(catchError(this.handleError));
   }
 
-  postData(data: any): Observable<any> {
-    const headers = new HttpHeaders({ 'Content-Type': 'application/json' });
+  public getExpandedTableRows(id: string): Observable<any> {
+    const data = { parameters: { id }, max_age: 1000 };
+    const expandedTableRowsUrl: string = `queries/51/results?api_key=fobpGFSDPMK1ljL8YfvUD0Hy4e7WiINJvA9yHzBl`;
+    const headers = new HttpHeaders({ 'Content-Type': 'application/json;charset=utf-8' });
+
     return this.http
-      .post<any>(this.apiUrl, data, { headers })
+      .post<any>(`${this.url}${expandedTableRowsUrl}`, data, { headers })
       .pipe(catchError(this.handleError));
   }
 
   private handleError(error: any): Observable<never> {
-    console.error('An error occurred', error);
-    return throwError(
-      () => new Error('Something bad happened; please try again later.')
-    );
+    console.error('Ошибка', error);
+    return throwError(() => new Error('Ошибка.'));
   }
 }

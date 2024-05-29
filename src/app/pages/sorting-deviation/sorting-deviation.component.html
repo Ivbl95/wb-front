@@ -33,11 +33,12 @@
   </mat-form-field>
 </form>
 
-@if (firstColumnIdsList$ | async; as firstColumnIdsList) {
-<mat-table [dataSource]="tableData$ | async" class="mat-elevation-z8" matSort>
-  @for (columnName of firstColumnIdsList$ | async; track columnName) {
+@if ({ firstColumnIdsList: firstColumnIdsList$ | async, secondColumnIdsList: secondColumnIdsList$ | async,
+columnsTypesCount: columnsTypesCount$ | async, expandedTableRows: expandedTableRows$ | async }; as vars) {
+<mat-table [dataSource]="tableRows$ | async" class="mat-elevation-z8 table" matSort multiTemplateDataRows>
+  @for (columnName of vars.firstColumnIdsList; track columnName) {
   <ng-container [matColumnDef]="columnName" [sticky]="columnName === 'sortingCenter'">
-    <mat-header-cell *matHeaderCellDef mat-sort-header>
+    <mat-header-cell *matHeaderCellDef mat-sort-header class="table__header-cell_col-1">
       {{ columnName | columnHeaderName }}
     </mat-header-cell>
 
@@ -45,23 +46,52 @@
       {{ element[columnName] ?? 0 }}
     </mat-cell>
   </ng-container>
-  } @if (columnsTypesCount$ | async; as showingColumnsCount) { @for (columnName of secondColumnIdsList$ | async; track
-  columnName) {
+  } @for (columnName of vars.secondColumnIdsList; track columnName) {
   <ng-container [matColumnDef]="columnName" [sticky]="columnName === 'empty'">
     <mat-header-cell
       *matHeaderCellDef
-      [style.max-width.px]="columnName === 'empty' ? 124 : 124 * showingColumnsCount"
-      [style.min-width.px]="columnName === 'empty' ? 124 : 124 * showingColumnsCount"
+      [class]="columnName === 'empty' ? 'table__header-cell_col-1' : 'table__header-cell_col-' + vars.columnsTypesCount"
     >
       {{ columnName | columnHeaderName }}
     </mat-header-cell>
   </ng-container>
-  } }
+  }
 
-  <mat-header-row *matHeaderRowDef="firstColumnIdsList; sticky: true"></mat-header-row>
+  <ng-container matColumnDef="expandedDetail">
+    <td mat-cell *matCellDef="let element">
+      <div class="example-element-detail" [@detailExpand]="element == expandedElement ? 'expanded' : 'collapsed'">
+        @if (vars.expandedTableRows[element.sortingCenter]) {
+        <mat-table
+          style="height: 100px"
+          [dataSource]="vars.expandedTableRows[element.sortingCenter]"
+          class="mat-elevation-z8 table"
+        >
+          @for (columnName of vars.firstColumnIdsList; track columnName) {
+          <ng-container [matColumnDef]="columnName" [sticky]="columnName === 'city'">
+            <mat-header-cell *matHeaderCellDef class="table__header-cell_col-1">
+              {{ columnName | columnHeaderName }}
+            </mat-header-cell>
 
-  <mat-header-row *matHeaderRowDef="secondColumnIdsList$ | async; sticky: true"></mat-header-row>
+            <mat-cell *matCellDef="let element" [style.background-color]="element[columnName + '-cell-color']">
+              {{ element[columnName] ?? 0 }}
+            </mat-cell>
+          </ng-container>
+          }
 
-  <mat-row *matRowDef="let row; columns: firstColumnIdsList"></mat-row>
+          <mat-row *matRowDef="let row; columns: vars.firstColumnIdsList"></mat-row>
+        </mat-table>
+        }
+      </div>
+    </td>
+  </ng-container>
+
+  <mat-header-row *matHeaderRowDef="vars.firstColumnIdsList; sticky: true"></mat-header-row>
+  <mat-header-row *matHeaderRowDef="vars.secondColumnIdsList; sticky: true"></mat-header-row>
+  <mat-row
+    *matRowDef="let row; columns: vars.firstColumnIdsList"
+    (click)="processRowClick(row)"
+    [class.example-expanded-row]="expandedElement === row"
+  ></mat-row>
+  <mat-row *matRowDef="let row; columns: ['expandedDetail']" class="example-detail-row"></mat-row>
 </mat-table>
 }

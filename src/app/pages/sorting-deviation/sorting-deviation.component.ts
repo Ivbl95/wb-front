@@ -1,3 +1,4 @@
+import { animate, state, style, transition, trigger } from '@angular/animations';
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, ViewChild } from '@angular/core';
 import { FormControl, FormGroup, FormsModule, ReactiveFormsModule } from '@angular/forms';
@@ -8,13 +9,31 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import { combineLatest, map, Observable, startWith } from 'rxjs';
+import { BehaviorSubject, combineLatest, map, Observable, startWith, take } from 'rxjs';
 import { ColumnHeaderNamePipe } from '../../pipes/column-header-name.pipe';
 import { ApiService } from '../../services/api.service';
 
 enum SortLastMile {
   LM = 'lm',
   All = 'all',
+}
+
+enum GetTableRowsDict {
+  delta = 'Дельта',
+  sortingCenter = 'СЦ',
+  date = 'Дата',
+  id = 'ID',
+  sortedOn = 'Отсортировано на СЦ',
+  sortedFor = 'Отсортировано для СЦ',
+}
+
+enum getExpandedTableRowsDict {
+  delta = 'Дельта',
+  sortingCenter = 'Место сортировки для СЦ',
+  date = 'Дата',
+  id = 'ID',
+  sortedOn = 'Отсортировали в СЦ',
+  sortedFor = 'Отсортировали для СЦ',
 }
 
 const RECENT_DAYS_COUNT: number = 30;
@@ -38,12 +57,20 @@ const RECENT_DAYS_COUNT_ARRAY: number[] = Array.from({ length: RECENT_DAYS_COUNT
     MatSortModule,
     ColumnHeaderNamePipe,
   ],
+  animations: [
+    trigger('detailExpand', [
+      state('collapsed,void', style({ height: '0px', minHeight: '0' })),
+      state('expanded', style({ height: '*' })),
+      transition('expanded <=> collapsed', animate('225ms cubic-bezier(0.4, 0.0, 0.2, 1)')),
+    ]),
+  ],
   templateUrl: './sorting-deviation.component.html',
   styleUrl: './sorting-deviation.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SortingDeviationComponent {
   @ViewChild(MatSort) sort: MatSort | null = null;
+  public expandedElement: any;
 
   public formGroup: FormGroup<any> = new FormGroup<any>({
     sortLastMile: new FormControl<SortLastMile>(INIT_LAST_MILE, { nonNullable: true }),
@@ -110,71 +137,9 @@ export class SortingDeviationComponent {
     })
   );
 
-  public preparedData$: Observable<any> = this.apiService.getTableData().pipe(
-    map((jsonData: any) => {
-      const rows: any[] = jsonData.query_result.data.rows;
-      const preparedData: any = {};
-
-      rows.forEach((element: any) => {
-        const center: string = element['СЦ'];
-        const date: string = element['Дата'];
-        const cellValues: number[] = [
-          element['Дельта'],
-          element['Отсортировано на СЦ'],
-          element['Отсортировано для СЦ'],
-        ];
-
-        if (!preparedData[center]) {
-          preparedData[center] = {
-            sortingCenter: center,
-          };
-        }
-
-        [SortLastMile.All, SortLastMile.LM].forEach((sortLastMile: SortLastMile) => {
-          this.columnsTypes.forEach((columnType: string, index: number) => {
-            if (sortLastMile === SortLastMile.All || (sortLastMile === SortLastMile.LM && element['ПМ'] === 1)) {
-              const id: string = `${date}-${sortLastMile}-${columnType}`;
-              preparedData[center][id] = (preparedData[center][id] ?? 0) + cellValues[index];
-            }
-          });
-
-          const idDelta: string = `${date}-${sortLastMile}-delta`;
-          const idSortedOn: string = `${date}-${sortLastMile}-sortedOn`;
-          const idCellColor: string = `${date}-${sortLastMile}-delta-cell-color`;
-          const percentDifference: number = preparedData[center][idDelta] / preparedData[center][idSortedOn] || 0;
-
-          preparedData[center][idCellColor] = this.calcCellColor(percentDifference);
-        });
-      });
-
-      return Object.values(preparedData);
-    })
-  );
-
-  public preparedDataWithSum$: Observable<any> = combineLatest([this.preparedData$, this.firstColumnIdsList$]).pipe(
-    map(([preparedData, firstColumnIdsList]: [any[], string[]]) => {
-      const preparedDataWithSum: any = preparedData.map((preparedDataRow: any) => {
-        preparedDataRow['sum-delta'] = 0;
-        preparedDataRow['sum-sortedOn'] = 0;
-        preparedDataRow['sum-sortedFor'] = 0;
-
-        firstColumnIdsList.forEach((columnId: string) => {
-          this.columnsTypes.forEach((columnsType: string) => {
-            if (columnId.includes(columnsType)) {
-              preparedDataRow[`sum-${columnsType}`] += preparedDataRow[columnId] ?? 0;
-            }
-          });
-        });
-
-        const percentDifference: number = preparedDataRow['sum-delta'] / preparedDataRow['sum-sortedOn'] || 0;
-        preparedDataRow['sum-delta-cell-color'] = this.calcCellColor(percentDifference);
-
-        return preparedDataRow;
-      });
-
-      return new MatTableDataSource<any>(preparedDataWithSum);
-    })
-  );
+  public preparedTableRows$: Observable<any> = this.apiService
+    .getTableRows()
+    .pipe(map((jsonData: any) => this.prepareTableRows(jsonData.query_result.data.rows, GetTableRowsDict)));
 
   public calcCellColor(percentDifference: number): string {
     if (percentDifference >= 0.3) {
@@ -188,15 +153,134 @@ export class SortingDeviationComponent {
     }
   }
 
-  public tableData$: Observable<any> = combineLatest([this.preparedDataWithSum$, this.searchFieldValue$]).pipe(
-    map(([tableData, searchFieldValue]: [MatTableDataSource<any>, string]) => {
-      tableData.sort = this.sort;
-      tableData.filter = searchFieldValue?.trim() ?? '';
-      return tableData;
+  public preparedExpandedTableRows$: BehaviorSubject<any> = new BehaviorSubject<any>({});
+
+  constructor(private apiService: ApiService) {}
+
+  public processRowClick(row: any): void {
+    this.expandedElement = this.expandedElement === row ? null : row;
+    const preparedExpandedTableRows: any = this.preparedExpandedTableRows$.getValue() as Object;
+
+    if (!preparedExpandedTableRows.hasOwnProperty(row.sortingCenter)) {
+      this.getExpandedTableRows(row);
+    }
+  }
+
+  public getExpandedTableRows(row: any): void {
+    this.apiService
+      .getExpandedTableRows(row.id)
+      .pipe(take(1))
+      .subscribe((result: any) => {
+        if (!result.query_result?.data.rows) {
+          return;
+        }
+
+        this.preparedExpandedTableRows$.next({
+          ...this.preparedExpandedTableRows$.getValue(),
+          [row.sortingCenter]: this.prepareTableRows(result.query_result?.data.rows, getExpandedTableRowsDict),
+        });
+      });
+  }
+
+  public expandedTableRows$: Observable<any> = combineLatest([
+    this.preparedExpandedTableRows$,
+    this.firstColumnIdsList$,
+  ]).pipe(
+    map(([tableRows, firstColumnIdsList]: [any[], string[]]) => {
+      if (!this.expandedElement) {
+        return tableRows;
+      }
+
+      tableRows[this.expandedElement.sortingCenter] = this.prepareTableRowsWithSum(
+        tableRows[this.expandedElement.sortingCenter],
+        firstColumnIdsList
+      );
+
+      return tableRows;
     })
   );
 
-  constructor(private apiService: ApiService) {}
+  public preparedTableRowsWithSum$: Observable<any> = combineLatest([
+    this.preparedTableRows$,
+    this.firstColumnIdsList$,
+  ]).pipe(
+    map(([tableRows, firstColumnIdsList]: [any[], string[]]) => {
+      return new MatTableDataSource<any>(this.prepareTableRowsWithSum(tableRows, firstColumnIdsList));
+    })
+  );
+
+  public tableRows$: Observable<any> = combineLatest([this.preparedTableRowsWithSum$, this.searchFieldValue$]).pipe(
+    map(([tableRows, searchFieldValue]: [MatTableDataSource<any>, string]) => {
+      tableRows.sort = this.sort;
+      tableRows.filter = searchFieldValue?.trim() ?? '';
+      return tableRows;
+    })
+  );
+
+  public prepareTableRowsWithSum(tableRows: any[], firstColumnIdsList: any[]): any {
+    return tableRows.map((row: any) => {
+      row['sum-delta'] = 0;
+      row['sum-sortedOn'] = 0;
+      row['sum-sortedFor'] = 0;
+
+      firstColumnIdsList.forEach((columnId: string) => {
+        this.columnsTypes.forEach((columnsType: string) => {
+          if (columnId.includes(columnsType)) {
+            row[`sum-${columnsType}`] += row[columnId] ?? 0;
+          }
+        });
+      });
+
+      const percentDifference: number = row['sum-delta'] / row['sum-sortedOn'] || 0;
+      row['sum-delta-cell-color'] = this.calcCellColor(percentDifference);
+
+      return row;
+    });
+  }
+
+  public prepareTableRows(responseArr: any[], dict: typeof GetTableRowsDict | typeof getExpandedTableRowsDict): any[] {
+    if (!responseArr) {
+      return [];
+    }
+
+    const preparedRows: any = {};
+
+    responseArr.forEach((responseElement: any) => {
+      const sortingCenter: string = responseElement[dict.sortingCenter];
+      const date: string = responseElement[dict.date];
+      const id: string = responseElement[dict.id];
+      const cellValues: number[] = [
+        responseElement[dict.delta],
+        responseElement[dict.sortedOn],
+        responseElement[dict.sortedFor],
+      ];
+
+      if (!preparedRows[sortingCenter]) {
+        preparedRows[sortingCenter] = {
+          sortingCenter,
+          id,
+        };
+      }
+
+      [SortLastMile.All, SortLastMile.LM].forEach((sortLastMile: SortLastMile) => {
+        this.columnsTypes.forEach((columnType: string, index: number) => {
+          if (sortLastMile === SortLastMile.All || (sortLastMile === SortLastMile.LM && responseElement['ПМ'] === 1)) {
+            const id: string = `${date}-${sortLastMile}-${columnType}`;
+            preparedRows[sortingCenter][id] = (preparedRows[sortingCenter][id] ?? 0) + cellValues[index];
+          }
+        });
+
+        const idDelta: string = `${date}-${sortLastMile}-delta`;
+        const idSortedOn: string = `${date}-${sortLastMile}-sortedOn`;
+        const idCellColor: string = `${date}-${sortLastMile}-delta-cell-color`;
+        const percentDifference: number =
+          preparedRows[sortingCenter][idDelta] / preparedRows[sortingCenter][idSortedOn] || 0;
+        preparedRows[sortingCenter][idCellColor] = this.calcCellColor(percentDifference);
+      });
+    });
+
+    return Object.values(preparedRows);
+  }
 }
 // interface CellValue {
 //   delta: number;
