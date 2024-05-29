@@ -119,68 +119,23 @@ export class SortingDeviationComponent {
     this.enableDates$,
   ]).pipe(
     map(([sortLastMile, sortColumnTypes, enableDates]: [string, string[], string[]]) => {
-      const sumColumns: string[] = sortColumnTypes
-        .map((column: string) => `sum-${column}`)
-        .filter((column: string) => column);
-
+      const sumColumns: string[] = sortColumnTypes.map((columnType: string) => `sum-${columnType}`);
       const dateColumns: string[] = enableDates.flatMap((date: string) =>
-        sortColumnTypes.map((column: string) => `${date}-${sortLastMile}-${column}`)
+        sortColumnTypes.map((columnType: string) => `${date}-${sortLastMile}-${columnType}`)
       );
-
       return ['sortingCenter', ...sumColumns, ...dateColumns];
     })
   );
 
   public secondColumnIdsList$: Observable<string[]> = this.enableDates$.pipe(
-    map((enableDates: string[]) => {
-      return ['empty', 'sum', ...enableDates];
-    })
+    map((enableDates: string[]) => ['empty', 'sum', ...enableDates])
   );
 
   public preparedTableRows$: Observable<any> = this.apiService
     .getTableRows()
     .pipe(map((jsonData: any) => this.prepareTableRows(jsonData.query_result.data.rows, GetTableRowsDict)));
 
-  public calcCellColor(percentDifference: number): string {
-    if (percentDifference >= 0.3) {
-      return 'red';
-    } else if (percentDifference >= 0.1 && percentDifference < 0.3) {
-      return 'yellow';
-    } else if (percentDifference >= 0 && percentDifference < 0.1) {
-      return 'white';
-    } else {
-      return 'green';
-    }
-  }
-
   public preparedExpandedTableRows$: BehaviorSubject<any> = new BehaviorSubject<any>({});
-
-  constructor(private apiService: ApiService) {}
-
-  public processRowClick(row: any): void {
-    this.expandedElement = this.expandedElement === row ? null : row;
-    const preparedExpandedTableRows: any = this.preparedExpandedTableRows$.getValue() as Object;
-
-    if (!preparedExpandedTableRows.hasOwnProperty(row.sortingCenter)) {
-      this.getExpandedTableRows(row);
-    }
-  }
-
-  public getExpandedTableRows(row: any): void {
-    this.apiService
-      .getExpandedTableRows(row.id)
-      .pipe(take(1))
-      .subscribe((result: any) => {
-        if (!result.query_result?.data.rows) {
-          return;
-        }
-
-        this.preparedExpandedTableRows$.next({
-          ...this.preparedExpandedTableRows$.getValue(),
-          [row.sortingCenter]: this.prepareTableRows(result.query_result?.data.rows, getExpandedTableRowsDict),
-        });
-      });
-  }
 
   public expandedTableRows$: Observable<any> = combineLatest([
     this.preparedExpandedTableRows$,
@@ -216,6 +171,43 @@ export class SortingDeviationComponent {
       return tableRows;
     })
   );
+
+  constructor(private apiService: ApiService) {}
+
+  public calcCellColor(percentDifference: number): string {
+    return percentDifference >= 0.3
+      ? 'red'
+      : percentDifference >= 0.1
+      ? 'yellow'
+      : percentDifference >= 0
+      ? 'white'
+      : 'green';
+  }
+
+  public processRowClick(row: any): void {
+    this.expandedElement = this.expandedElement === row ? null : row;
+    const preparedExpandedTableRows: any = this.preparedExpandedTableRows$.getValue() as Object;
+
+    if (!preparedExpandedTableRows.hasOwnProperty(row.sortingCenter)) {
+      this.updateExpandedTableRows(row);
+    }
+  }
+
+  public updateExpandedTableRows(row: any): void {
+    this.apiService
+      .getExpandedTableRows(row.id)
+      .pipe(take(1))
+      .subscribe((result: any) => {
+        if (!result.query_result?.data.rows) {
+          return;
+        }
+
+        this.preparedExpandedTableRows$.next({
+          ...this.preparedExpandedTableRows$.getValue(),
+          [row.sortingCenter]: this.prepareTableRows(result.query_result?.data.rows, getExpandedTableRowsDict),
+        });
+      });
+  }
 
   public prepareTableRowsWithSum(tableRows: any[], firstColumnIdsList: any[]): any {
     return tableRows.map((row: any) => {
